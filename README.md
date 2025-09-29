@@ -97,17 +97,3 @@ python vulnerability_checker.py
 
 This tool is intended for educational and authorized security testing purposes only.  
 Use it exclusively on systems and databases for which you have explicit permission.
-
----
-
-## License
-
-MIT License (or specify accordingly)
-
----
-
-## Contributing
-
-Contributions are welcome. Submit pull requests or report issues to suggest enhancements or fixes.
-
----
