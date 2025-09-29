@@ -15,6 +15,8 @@ RED = '\033[91m'
 YELLOW = '\033[93m'
 BLUE = '\033[94m'
 GREEN = '\033[92m'
+AI_API_KEY = ''
+AI_API_URL = ''
 
 def log(level, message, secret_key=None):
     now = datetime.datetime.now().strftime('%H:%M:%S')
@@ -73,9 +75,9 @@ def fetch_creds_from_ai(vault_url, code, retries=3, delay=5):
         f"Do not include any other text.\n\nCode:\n{code}"
     )
     
-    api_url = "https://router.huggingface.co/novita/v3/openai/chat/completions"
+    api_url = f"{AI_API_URL}"
     headers = {
-        "Authorization": "Bearer ---",
+        "Authorization": f"Bearer {AI_API_KEY}",
         "Content-Type": "application/json"
     }
     payload = {
@@ -124,9 +126,9 @@ def fetch_tables_from_ai(vault_url, code, retries=3, delay=5):
         f"(use actual table names from the code). Do not include any other text.\n\nCode:\n{code}"
     )
     
-    api_url = "https://router.huggingface.co/novita/v3/openai/chat/completions"
+    api_url = f"{AI_API_URL}"
     headers = {
-        "Authorization": "Bearer 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",
+        "Authorization": f"Bearer {AI_API_KEY}",
         "Content-Type": "application/json"
     }
     payload = {
