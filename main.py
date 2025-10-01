@@ -18,8 +18,8 @@ RED = '\033[91m'
 YELLOW = '\033[93m'
 BLUE = '\033[94m'
 GREEN = '\033[92m'
-AI_API_KEY = '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'
-AI_API_URL = 'https://router.huggingface.co/novita/v3/openai/chat/completions'
+AI_API_KEY = ''
+AI_API_URL = ''
 
 def log(level, message, secret_key=None):
     now = datetime.datetime.now().strftime('%H:%M:%S')
