@@ -70,13 +70,22 @@ def validate_hub(hub_url, hub_key):
         log('ERROR', f'Invalid {hub_url} or key. Error: {e.stderr}', hub_key)
         return False
 
-def fetch_creds_from_ai(vault_url, code, retries=3, delay=5):
-    prompt = (
-        f"Analyze the following code and extract the URL and key. "
-        f"Return only a JSON object like: {{\"url\": \"https://example.datahub\", \"key\": \"eyJhb...\"}} "
-        f"(use actual values from the code). If no credentials are found, return an empty object: {{}}. "
-        f"Do not include any other text.\n\nCode:\n{code}"
-    )
+def fetch_creds_from_ai(vault_url, code, is_db=False, retries=3, delay=5):
+    if is_db:
+        prompt = (
+            f"Analyze the following code and extract PostgreSQL database connection details. "
+            f"Return only a JSON object like: "
+            f"{{\"user\": \"postgres.user\", \"password\": \"pass\", \"host\": \"host\", \"port\": \"port\", \"name\": \"db\", \"sslmode\": \"require\"}} "
+            f"(use actual values from the code). If no credentials are found, return an empty object: {{}}. "
+            f"Do not include any other text.\n\nCode:\n{code}"
+        )
+    else:
+        prompt = (
+            f"Analyze the following code and extract the URL and key. "
+            f"Return only a JSON object like: {{\"url\": \"https://example.datahub\", \"key\": \"eyJhb...\"}} "
+            f"(use actual values from the code). If no credentials are found, return an empty object: {{}}. "
+            f"Do not include any other text.\n\nCode:\n{code}"
+        )
     
     api_url = f"{AI_API_URL}"
     headers = {
@@ -107,11 +116,20 @@ def fetch_creds_from_ai(vault_url, code, retries=3, delay=5):
             credentials = json.loads(cleaned_content)
             stop_event.set()
             loading_thread.join()
-            if not credentials.get('url') or not credentials.get('key'):
-                log('WARNING', 'No credentials found in AI response.')
-                return None, None
-            log('SUCCESS', f'Extracted URL: {credentials["url"]}')
-            return credentials['url'], credentials['key']
+            if is_db:
+                required_keys = ['user', 'password', 'host', 'port', 'name']
+                if not all(credentials.get(key) for key in required_keys):
+                    log('WARNING', 'Incomplete database credentials found in AI response.')
+                    return None
+                log('SUCCESS', f'Extracted database credentials for {credentials["host"]}')
+                return (f"postgresql://{credentials['user']}:{credentials['password']}@"
+                        f"{credentials['host']}:{credentials['port']}/{credentials['name']}?sslmode={credentials.get('sslmode', 'require')}")
+            else:
+                if not credentials.get('url') or not credentials.get('key'):
+                    log('WARNING', 'No credentials found in AI response.')
+                    return None, None
+                log('SUCCESS', f'Extracted URL: {credentials["url"]}')
+                return credentials['url'], credentials['key']
         except Exception as e:
             log('ERROR', f'AI analysis attempt {attempt + 1}/{retries} failed: {str(e)}')
             if attempt < retries - 1:
@@ -120,7 +138,7 @@ def fetch_creds_from_ai(vault_url, code, retries=3, delay=5):
     stop_event.set()
     loading_thread.join()
     log('ERROR', 'All AI attempts failed to fetch credentials.')
-    return None, None
+    return None if is_db else (None, None)
 
 def fetch_tables_from_ai(vault_url, code, retries=3, delay=5):
     prompt = (
@@ -427,8 +445,38 @@ def main():
     existing_tables = []
 
     if method == 'db':
-        log('INPUT', 'Enter PostgreSQL database URL (e.g., postgresql://user:pass@host:port/db):')
-        db_url = input().strip()
+        log('INPUT', "Choose method for database credentials: 'ai' to analyze code or 'manual' to enter directly:")
+        creds_method = input().strip().lower()
+        
+        if creds_method == 'ai':
+            log('INPUT', 'Enter raw URL containing database configuration:')
+            creds_url = input().strip()
+            stop_event = threading.Event()
+            loading_thread = threading.Thread(target=show_loading, args=(stop_event, 'Fetching database configuration...'))
+            loading_thread.start()
+            try:
+                response = requests.get(creds_url, timeout=10)
+                response.raise_for_status()
+                creds_code = response.text
+                stop_event.set()
+                loading_thread.join()
+                log('SUCCESS', 'Successfully fetched database configuration.')
+            except Exception as e:
+                stop_event.set()
+                loading_thread.join()
+                log('ERROR', f'Failed to fetch configuration code: {str(e)}')
+                input("Press any key to exit...")
+                sys.exit(1)
+            
+            db_url = fetch_creds_from_ai(creds_url, creds_code, is_db=True)
+            if not db_url:
+                log('WARNING', 'AI failed to extract valid database credentials. Falling back to manual input.')
+                creds_method = 'manual'
+        
+        if creds_method != 'ai':
+            log('INPUT', 'Enter PostgreSQL database URL (e.g., postgresql://user:pass@host:port/db):')
+            db_url = input().strip()
+        
         try:
             conn = psycopg2.connect(db_url)
             log('SUCCESS', 'Successfully connected to database.')
